@@ -40,7 +40,7 @@
 
 <div id="control">
   <input id="verseInput" placeholder="Type John 3:16">
-  <button onclick="showVerse()">Display</button>
+  <button onclick="getVerse()">Display</button>
 </div>
 
 <div id="display">
@@ -48,9 +48,23 @@
 </div>
 
 <script>
-function showVerse() {
-  const verse = document.getElementById("verseInput").value;
-  document.getElementById("display").innerText = verse;
+async function getVerse() {
+  const ref = document.getElementById("verseInput").value;
+
+  try {
+    const res = await fetch(`https://bible-api.com/${ref}`);
+    const data = await res.json();
+
+    if (data.text) {
+      document.getElementById("display").innerText =
+        data.reference + "\n\n" + data.text;
+    } else {
+      document.getElementById("display").innerText = "Verse not found";
+    }
+
+  } catch (error) {
+    document.getElementById("display").innerText = "Error fetching verse";
+  }
 }
 </script>
 
