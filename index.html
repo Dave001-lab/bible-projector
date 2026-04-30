@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Bible Projector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial;
+      background: black;
+      color: white;
+      text-align: center;
+    }
+
+    #control {
+      padding: 20px;
+      background: #111;
+    }
+
+    input {
+      padding: 10px;
+      font-size: 18px;
+      width: 60%;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 18px;
+      margin-left: 10px;
+    }
+
+    #display {
+      font-size: 40px;
+      padding: 40px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="control">
+  <input id="verseInput" placeholder="Type John 3:16">
+  <button onclick="showVerse()">Display</button>
+</div>
+
+<div id="display">
+  Your verse will appear here
+</div>
+
+<script>
+function showVerse() {
+  const verse = document.getElementById("verseInput").value;
+  document.getElementById("display").innerText = verse;
+}
+</script>
+
+</body>
+</html>
