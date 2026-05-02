@@ -3,35 +3,79 @@
 <head>
   <title>Bible Projector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <style>
     body {
       margin: 0;
-      font-family: Arial;
-      background: black;
-      color: white;
-      text-align: center;
+      font-family: 'Segoe UI', sans-serif;
+      background: #0d0d0d;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
     }
 
     #control {
-      padding: 20px;
-      background: #111;
+      padding: 15px;
+      background: #121212;
+      display: flex;
+      gap: 10px;
+      border-bottom: 1px solid #222;
     }
 
     input {
-      padding: 10px;
-      font-size: 18px;
-      width: 60%;
+      flex: 1;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: none;
+      background: #1e1e1e;
+      color: white;
     }
 
     button {
-      padding: 10px 20px;
-      font-size: 18px;
-      margin-left: 10px;
+      padding: 12px 18px;
+      border: none;
+      border-radius: 6px;
+      background: #2962ff;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #448aff;
     }
 
     #display {
-      font-size: 40px;
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
       padding: 40px;
+    }
+
+    #verseBox {
+      max-width: 900px;
+    }
+
+    #reference {
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      color: #90caf9;
+    }
+
+    #text {
+      font-size: 40px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 600px) {
+      #text {
+        font-size: 26px;
+      }
     }
   </style>
 </head>
@@ -39,15 +83,34 @@
 <body>
 
 <div id="control">
-  <input id="verseInput" placeholder="Type John 3:16">
+  <input id="verseInput" placeholder="e.g. John 3:16">
   <button onclick="getVerse()">Display</button>
 </div>
 
 <div id="display">
-  Your verse will appear here
+  <div id="verseBox">
+    <div id="reference">Waiting...</div>
+    <div id="text">Your verse will appear here</div>
+  </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
+
 <script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCBElewwMWAk42lYzbAx-iuj8FZIV7NErY",
+  authDomain: "bible-projector-28521.firebaseapp.com",
+  databaseURL: "https://bible-projector-28521-default-rtdb.firebaseio.com",
+  projectId: "bible-projector-28521",
+  storageBucket: "bible-projector-28521.firebasestorage.app",
+  messagingSenderId: "877315273616",
+  appId: "1:877315273616:web:62f9aea932b4d643493915"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
 async function getVerse() {
   const ref = document.getElementById("verseInput").value;
 
@@ -56,16 +119,23 @@ async function getVerse() {
     const data = await res.json();
 
     if (data.text) {
-      document.getElementById("display").innerText =
-        data.reference + "\n\n" + data.text;
-    } else {
-      document.getElementById("display").innerText = "Verse not found";
+      db.ref("currentVerse").set({
+        reference: data.reference,
+        text: data.text
+      });
     }
-
-  } catch (error) {
-    document.getElementById("display").innerText = "Error fetching verse";
+  } catch {
+    alert("Error fetching verse");
   }
 }
+
+db.ref("currentVerse").on("value", (snapshot) => {
+  const data = snapshot.val();
+  if (data) {
+    document.getElementById("reference").innerText = data.reference;
+    document.getElementById("text").innerText = data.text;
+  }
+});
 </script>
 
 </body>
