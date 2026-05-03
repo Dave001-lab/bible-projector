@@ -1,178 +1,42 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Bible Projector</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+  <title>Display</title>
   <style>
     body {
-      margin: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background: #0d0d0d;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
-
-    #control {
-      padding: 15px;
-      background: #121212;
-      display: flex;
-      gap: 10px;
-      border-bottom: 1px solid #222;
-    }
-
-    input {
-      flex: 1;
-      padding: 12px;
-      font-size: 16px;
-      border-radius: 6px;
-      border: none;
-      background: #1e1e1e;
+      background: black;
       color: white;
-    }
-
-    button {
-      padding: 12px 18px;
-      border: none;
-      border-radius: 6px;
-      background: #2962ff;
-      color: white;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #448aff;
-    }
-
-    #display {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      font-size: 50px;
       text-align: center;
-      padding: 40px;
-    }
-
-    #verseBox {
-      max-width: 900px;
-    }
-
-    #reference {
-      font-size: 28px;
-      font-weight: bold;
-      margin-bottom: 20px;
-      color: #90caf9;
-    }
-
-    #text {
-      font-size: 40px;
-      line-height: 1.5;
-      white-space: pre-wrap;
-    }
-
-    @media (max-width: 600px) {
-      #text {
-        font-size: 26px;
-      }
+      padding: 50px;
     }
   </style>
 </head>
-
 <body>
 
-<div id="control">
-  <input id="verseInput" placeholder="e.g. John 3:16">
-  <button onclick="getVerse()">Display</button>
-<button onclick="startListening()">🎤 Speak</button>
-
-<div id="display">
-  <div id="verseBox">
-    <div id="reference">Waiting...</div>
-    <div id="text">Your verse will appear here</div>
-  </div>
-</div>
+<div id="display">Waiting...</div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
 
 <script>
 const firebaseConfig = {
-  apiKey: "AIzaSyCBElewwMWAk42lYzbAx-iuj8FZIV7NErY",
-  authDomain: "bible-projector-28521.firebaseapp.com",
-  databaseURL: "https://bible-projector-28521-default-rtdb.firebaseio.com",
-  projectId: "bible-projector-28521",
-  storageBucket: "bible-projector-28521.firebasestorage.app",
-  messagingSenderId: "877315273616",
-  appId: "1:877315273616:web:62f9aea932b4d643493915"
+  apiKey: "PASTE_YOURS",
+  authDomain: "PASTE_YOURS",
+  databaseURL: "PASTE_YOURS",
+  projectId: "PASTE_YOURS",
+  storageBucket: "PASTE_YOURS",
+  messagingSenderId: "PASTE_YOURS",
+  appId: "PASTE_YOURS"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-async function getVerse() {
-  const ref = document.getElementById("verseInput").value;
-
-  try {
-    const res = await fetch(`https://bible-api.com/${ref}`);
-    const data = await res.json();
-
-    if (data.text) {
-      db.ref("currentVerse").set({
-        reference: data.reference,
-        text: data.text
-      });
-    }
-  } catch {
-    alert("Error fetching verse");
-  }
-}
-
 db.ref("currentVerse").on("value", (snapshot) => {
-  const data = snapshot.val();
-  if (data) {
-    document.getElementById("reference").innerText = data.reference;
-    document.getElementById("text").innerText = data.text;
-  }
+  document.getElementById("display").innerText = snapshot.val();
 });
 </script>
 
 </body>
 </html>
-function startListening() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (!SpeechRecognition) {
-    alert("Voice recognition not supported on this device");
-    return;
-  }
-
-  const recognition = new SpeechRecognition();
-  recognition.lang = "en-US";
-  recognition.start();
-
-  recognition.onstart = () => {
-    document.getElementById("reference").innerText = "Listening...";
-  };
-
-  recognition.onresult = (event) => {
-    let speechText = event.results[0][0].transcript;
-
-    // Convert spoken words to format
-    speechText = speechText
-      .replace(/chapter/gi, "")
-      .replace(/verse/gi, "")
-      .replace(/:/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    document.getElementById("verseInput").value = speechText;
-
-    getVerse(); // auto fetch verse
-  };
-
-  recognition.onerror = () => {
-    alert("Voice recognition failed");
-  };
-}
