@@ -85,7 +85,7 @@
 <div id="control">
   <input id="verseInput" placeholder="e.g. John 3:16">
   <button onclick="getVerse()">Display</button>
-</div>
+<button onclick="startListening()">🎤 Speak</button>
 
 <div id="display">
   <div id="verseBox">
@@ -140,3 +140,39 @@ db.ref("currentVerse").on("value", (snapshot) => {
 
 </body>
 </html>
+function startListening() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    alert("Voice recognition not supported on this device");
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.start();
+
+  recognition.onstart = () => {
+    document.getElementById("reference").innerText = "Listening...";
+  };
+
+  recognition.onresult = (event) => {
+    let speechText = event.results[0][0].transcript;
+
+    // Convert spoken words to format
+    speechText = speechText
+      .replace(/chapter/gi, "")
+      .replace(/verse/gi, "")
+      .replace(/:/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    document.getElementById("verseInput").value = speechText;
+
+    getVerse(); // auto fetch verse
+  };
+
+  recognition.onerror = () => {
+    alert("Voice recognition failed");
+  };
+}
