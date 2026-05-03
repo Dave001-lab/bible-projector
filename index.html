@@ -1,41 +1,182 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Display</title>
+  <title>Bible Projector AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <style>
     body {
-      background: black;
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #0d0d0d;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #control {
+      padding: 15px;
+      background: #121212;
+      display: flex;
+      gap: 10px;
+      border-bottom: 1px solid #222;
+    }
+
+    input {
+      flex: 1;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: none;
+      background: #1e1e1e;
       color: white;
-      font-size: 50px;
+    }
+
+    button {
+      padding: 12px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #2962ff;
+      color: white;
+      cursor: pointer;
+    }
+
+    #display {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
       text-align: center;
-      padding: 50px;
+      padding: 40px;
+    }
+
+    #box {
+      max-width: 900px;
+    }
+
+    #reference {
+      font-size: 28px;
+      color: #90caf9;
+      margin-bottom: 20px;
+    }
+
+    #text {
+      font-size: 40px;
+      line-height: 1.5;
+      white-space: pre-wrap;
     }
   </style>
 </head>
+
 <body>
 
-<div id="display">Waiting...</div>
+<div id="control">
+  <input id="verseInput" placeholder="John 3:16">
+  <button onclick="getVerse()">Display</button>
+  <button onclick="startListening()">🎤 Speak</button>
+</div>
 
+<div id="display">
+  <div id="box">
+    <div id="reference">Waiting...</div>
+    <div id="text">Your verse will appear here</div>
+  </div>
+</div>
+
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
 
 <script>
 const firebaseConfig = {
-  apiKey: "PASTE_YOURS",
-  authDomain: "PASTE_YOURS",
-  databaseURL: "PASTE_YOURS",
-  projectId: "PASTE_YOURS",
-  storageBucket: "PASTE_YOURS",
-  messagingSenderId: "PASTE_YOURS",
-  appId: "PASTE_YOURS"
+  apiKey: "AIzaSyCBElewwMWAk42lYzbAx-iuj8FZIV7NErY",
+  authDomain: "bible-projector-28521.firebaseapp.com",
+  databaseURL: "https://bible-projector-28521-default-rtdb.firebaseio.com",
+  projectId: "bible-projector-28521",
+  storageBucket: "bible-projector-28521.firebasestorage.app",
+  messagingSenderId: "877315273616",
+  appId: "1:877315273616:web:62f9aea932b4d643493915"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-db.ref("currentVerse").on("value", (snapshot) => {
-  document.getElementById("display").innerText = snapshot.val();
+// Fetch verse
+async function getVerse() {
+  const ref = document.getElementById("verseInput").value;
+
+  try {
+    const res = await fetch(`https://bible-api.com/${ref}`);
+    const data = await res.json();
+
+    if (data.text) {
+      db.ref("verse").set({
+        ref: data.reference,
+        text: data.text
+      });
+    } else {
+      alert("Verse not found");
+    }
+  } catch {
+    alert("Error fetching verse");
+  }
+}
+
+// Listen for updates
+db.ref("verse").on("value", (snap) => {
+  const data = snap.val();
+  if (data) {
+    document.getElementById("reference").innerText = data.ref;
+    document.getElementById("text").innerText = data.text;
+  }
 });
+
+// Voice AI
+function startListening() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    alert("Voice not supported. Use Chrome.");
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.start();
+
+  document.getElementById("reference").innerText = "Listening...";
+
+  recognition.onresult = (event) => {
+    let text = event.results[0][0].transcript.toLowerCase();
+
+    // Fix numbers
+    text = text
+      .replace(/one/g, "1")
+      .replace(/two/g, "2")
+      .replace(/three/g, "3")
+      .replace(/four/g, "4")
+      .replace(/five/g, "5")
+      .replace(/six/g, "6")
+      .replace(/seven/g, "7")
+      .replace(/eight/g, "8")
+      .replace(/nine/g, "9")
+      .replace(/ten/g, "10");
+
+    // Fix format
+    text = text.replace(/(\d+)\s+(\d+)/, "$1:$2");
+
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+
+    document.getElementById("verseInput").value = text;
+
+    getVerse();
+  };
+
+  recognition.onerror = () => {
+    alert("Voice failed");
+  };
+}
 </script>
 
 </body>
