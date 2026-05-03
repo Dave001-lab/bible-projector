@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Bible Projector AI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -96,23 +97,36 @@
       font-size: 18px;
       margin-top: 10px;
     }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
   </style>
 </head>
 
 <body>
 
 <div id="control">
-  <input id="verseInput" placeholder="John 3:16" autocomplete="off">
-  <button id="displayBtn" onclick="getVerse()">Display</button>
-  <button id="speakBtn" onclick="startListening()">🎤 Speak</button>
+  <label for="verseInput" class="sr-only">Verse reference</label>
+  <input id="verseInput" placeholder="John 3:16" autocomplete="off" aria-label="Verse reference">
+  <button id="displayBtn" type="button" aria-label="Display verse">Display</button>
+  <button id="speakBtn" type="button" aria-label="Speak a verse reference">🎤 Speak</button>
 </div>
 
 <div id="display">
-  <div id="box">
+  <div id="box" role="region" aria-live="polite">
     <div id="reference">Waiting...</div>
     <div id="text">Your verse will appear here</div>
     <div class="loading" id="loading">Loading verse...</div>
-    <div class="error" id="error"></div>
+    <div class="error" id="error" role="alert"></div>
   </div>
 </div>
 
@@ -121,8 +135,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
 
 <script>
-// ⚠️ SECURITY WARNING: Replace this with environment variables or backend proxy
-// These credentials should not be exposed in client-side code
+// ⚠️ The Firebase Web API key is intended to be public, but database
+// access must be restricted via Realtime Database security rules so
+// that only authorized clients can write to /verse.
 const firebaseConfig = {
   apiKey: "AIzaSyCBElewwMWAk42lYzbAx-iuj8FZIV7NErY",
   authDomain: "bible-projector-28521.firebaseapp.com",
@@ -137,54 +152,106 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 let verseListener = null;
 
-// Fetch verse with validation and error handling
+const els = {
+  input: document.getElementById("verseInput"),
+  displayBtn: document.getElementById("displayBtn"),
+  speakBtn: document.getElementById("speakBtn"),
+  reference: document.getElementById("reference"),
+  text: document.getElementById("text"),
+  loading: document.getElementById("loading"),
+  error: document.getElementById("error"),
+};
+
+const FETCH_TIMEOUT_MS = 10000;
+const SPEECH_TIMEOUT_MS = 10000;
+
+// Longer tokens first so "twenty one" doesn't become "twenty 1".
+const NUMBER_WORDS = [
+  ["one hundred fifty", 150], ["one hundred forty", 140], ["one hundred thirty", 130],
+  ["one hundred twenty", 120], ["one hundred ten", 110], ["one hundred", 100],
+  ["ninety", 90], ["eighty", 80], ["seventy", 70], ["sixty", 60], ["fifty", 50],
+  ["forty", 40], ["thirty", 30], ["twenty", 20],
+  ["nineteen", 19], ["eighteen", 18], ["seventeen", 17], ["sixteen", 16],
+  ["fifteen", 15], ["fourteen", 14], ["thirteen", 13], ["twelve", 12], ["eleven", 11],
+  ["ten", 10], ["nine", 9], ["eight", 8], ["seven", 7], ["six", 6],
+  ["five", 5], ["four", 4], ["three", 3], ["two", 2], ["one", 1],
+];
+
+function wordsToNumbers(input) {
+  let out = input;
+  for (const [word, num] of NUMBER_WORDS) {
+    out = out.replace(new RegExp(`\\b${word}\\b`, "g"), String(num));
+  }
+  // Collapse "20 1" → "21" for compound tens (only when first is a multiple of 10).
+  out = out.replace(/\b([2-9])0\s+([1-9])\b/g, (_, tens, ones) => `${tens}${ones}`);
+  return out;
+}
+
+function titleCase(str) {
+  return str.replace(/\b([a-z])([a-z']*)/g, (_, head, tail) => head.toUpperCase() + tail);
+}
+
+function normalizeReference(raw) {
+  let text = raw.trim().toLowerCase();
+  if (!text) return "";
+  text = wordsToNumbers(text);
+  // "john 3 16" → "john 3:16" (global so "john 3 16 to 18" also normalizes).
+  text = text.replace(/(\d+)\s+(\d+)/g, "$1:$2");
+  text = text.replace(/\s+/g, " ").trim();
+  return titleCase(text);
+}
+
 async function getVerse() {
-  const ref = document.getElementById("verseInput").value.trim();
-  const errorDiv = document.getElementById("error");
-  const loadingDiv = document.getElementById("loading");
-  const displayBtn = document.getElementById("displayBtn");
-  const speakBtn = document.getElementById("speakBtn");
+  const ref = els.input.value.trim();
 
-  // Clear previous errors
-  errorDiv.innerText = "";
+  els.error.innerText = "";
 
-  // Validate input
   if (!ref) {
-    errorDiv.innerText = "Please enter a verse reference (e.g., John 3:16)";
+    els.error.innerText = "Please enter a verse reference (e.g., John 3:16)";
     return;
   }
 
-  // Show loading state
-  loadingDiv.classList.add("active");
-  displayBtn.disabled = true;
-  speakBtn.disabled = true;
+  els.loading.classList.add("active");
+  els.displayBtn.disabled = true;
+  els.speakBtn.disabled = true;
 
   try {
-    const res = await fetch(`https://bible-api.com/${encodeURIComponent(ref)}`);
+    const res = await fetch(
+      `https://bible-api.com/${encodeURIComponent(ref)}`,
+      { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }
+    );
+
+    if (!res.ok) {
+      els.error.innerText = res.status === 404
+        ? "Verse not found. Try a different reference."
+        : `Lookup failed (${res.status}). Please try again.`;
+      return;
+    }
+
     const data = await res.json();
 
     if (data.text && data.reference) {
-      db.ref("verse").set({
+      await db.ref("verse").set({
         ref: data.reference,
-        text: data.text
+        text: data.text,
       });
-      errorDiv.innerText = "";
+      els.error.innerText = "";
     } else {
-      errorDiv.innerText = `Verse not found. Try a different reference.`;
+      els.error.innerText = "Verse not found. Try a different reference.";
     }
   } catch (error) {
-    errorDiv.innerText = "Error fetching verse. Check your connection and try again.";
+    els.error.innerText = error.name === "TimeoutError" || error.name === "AbortError"
+      ? "Lookup timed out. Please try again."
+      : "Error fetching verse. Check your connection and try again.";
     console.error("Fetch error:", error);
   } finally {
-    loadingDiv.classList.remove("active");
-    displayBtn.disabled = false;
-    speakBtn.disabled = false;
+    els.loading.classList.remove("active");
+    els.displayBtn.disabled = false;
+    els.speakBtn.disabled = false;
   }
 }
 
-// Listen for updates with proper cleanup
 function setupVerseListener() {
-  // Remove old listener if it exists
   if (verseListener) {
     db.ref("verse").off("value", verseListener);
   }
@@ -192,30 +259,29 @@ function setupVerseListener() {
   verseListener = (snap) => {
     const data = snap.val();
     if (data) {
-      document.getElementById("reference").innerText = data.ref;
-      document.getElementById("text").innerText = data.text;
+      els.reference.innerText = data.ref;
+      els.text.innerText = data.text;
+      els.error.innerText = "";
     }
   };
 
   db.ref("verse").on("value", verseListener);
 }
 
-// Cleanup listener on page unload
 window.addEventListener("beforeunload", () => {
   if (verseListener) {
     db.ref("verse").off("value", verseListener);
+    verseListener = null;
   }
 });
 
-// Initialize listener
 setupVerseListener();
 
-// Voice AI with improved error handling
 function startListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    alert("Voice not supported. Please use Chrome, Edge, or Safari.");
+    els.error.innerText = "Voice not supported. Please use Chrome, Edge, or Safari.";
     return;
   }
 
@@ -224,88 +290,85 @@ function startListening() {
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
 
-  document.getElementById("reference").innerText = "Listening...";
-  document.getElementById("error").innerText = "";
-  document.getElementById("speakBtn").disabled = true;
+  let resolved = false;
+  els.reference.innerText = "Listening...";
+  els.error.innerText = "";
+  els.speakBtn.disabled = true;
 
-  recognition.start();
-
-  // Timeout after 10 seconds
   const timeout = setTimeout(() => {
+    if (resolved) return;
+    resolved = true;
     recognition.abort();
-    document.getElementById("reference").innerText = "Listening timeout";
-    document.getElementById("error").innerText = "Please try again.";
-    document.getElementById("speakBtn").disabled = false;
-  }, 10000);
+    els.reference.innerText = "Listening timeout";
+    els.error.innerText = "Please try again.";
+    els.speakBtn.disabled = false;
+  }, SPEECH_TIMEOUT_MS);
 
   recognition.onresult = (event) => {
+    if (resolved) return;
+    resolved = true;
     clearTimeout(timeout);
 
-    // Safely access results
-    if (!event.results || !event.results[0] || !event.results[0][0]) {
-      document.getElementById("error").innerText = "No speech detected. Please try again.";
-      document.getElementById("speakBtn").disabled = false;
+    const transcript = event?.results?.[0]?.[0]?.transcript;
+    if (!transcript || !transcript.trim()) {
+      els.error.innerText = "No speech detected. Please try again.";
+      els.reference.innerText = "Waiting...";
+      els.speakBtn.disabled = false;
       return;
     }
 
-    let text = event.results[0][0].transcript.trim().toLowerCase();
-
-    if (!text) {
-      document.getElementById("error").innerText = "No speech detected. Please try again.";
-      document.getElementById("speakBtn").disabled = false;
-      return;
-    }
-
-    // Fix word numbers (1-10)
-    text = text
-      .replace(/\bone\b/g, "1")
-      .replace(/\btwo\b/g, "2")
-      .replace(/\bthree\b/g, "3")
-      .replace(/\bfour\b/g, "4")
-      .replace(/\bfive\b/g, "5")
-      .replace(/\bsix\b/g, "6")
-      .replace(/\bseven\b/g, "7")
-      .replace(/\beight\b/g, "8")
-      .replace(/\bnine\b/g, "9")
-      .replace(/\bten\b/g, "10");
-
-    // Fix format: "john 3 16" -> "john 3:16"
-    text = text.replace(/(\d+)\s+(\d+)/, "$1:$2");
-
-    // Capitalize first letter
-    text = text.charAt(0).toUpperCase() + text.slice(1);
-
-    document.getElementById("verseInput").value = text;
-    document.getElementById("speakBtn").disabled = false;
-
+    const normalized = normalizeReference(transcript);
+    els.input.value = normalized;
+    els.speakBtn.disabled = false;
     getVerse();
   };
 
   recognition.onerror = (event) => {
+    if (resolved) return;
+    resolved = true;
     clearTimeout(timeout);
-    document.getElementById("speakBtn").disabled = false;
+    els.speakBtn.disabled = false;
 
     const errorMessages = {
       "no-speech": "No speech detected. Please speak clearly.",
       "audio-capture": "No microphone found.",
       "network": "Network error. Check your connection.",
-      "not-allowed": "Microphone permission denied."
+      "not-allowed": "Microphone permission denied.",
+      "aborted": "Listening cancelled.",
     };
 
-    const errorMsg = errorMessages[event.error] || "Voice recognition failed. Please try again.";
-    document.getElementById("error").innerText = errorMsg;
-    document.getElementById("reference").innerText = "Error";
+    els.error.innerText = errorMessages[event.error] || "Voice recognition failed. Please try again.";
+    els.reference.innerText = "Error";
   };
 
   recognition.onend = () => {
     clearTimeout(timeout);
-    document.getElementById("speakBtn").disabled = false;
+    els.speakBtn.disabled = false;
+    if (!resolved) {
+      resolved = true;
+      if (els.reference.innerText === "Listening...") {
+        els.reference.innerText = "Waiting...";
+      }
+    }
   };
+
+  try {
+    recognition.start();
+  } catch (err) {
+    clearTimeout(timeout);
+    resolved = true;
+    els.speakBtn.disabled = false;
+    els.reference.innerText = "Error";
+    els.error.innerText = "Could not start voice recognition. Please try again.";
+    console.error("Speech start error:", err);
+  }
 }
 
-// Allow Enter key to trigger search
-document.getElementById("verseInput").addEventListener("keypress", (e) => {
+els.displayBtn.addEventListener("click", getVerse);
+els.speakBtn.addEventListener("click", startListening);
+els.input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
+    e.preventDefault();
     getVerse();
   }
 });
